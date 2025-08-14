@@ -1,0 +1,27 @@
+# Dependencias
+node_modules/
+npm-debug.log
+
+# Entorno
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Archivos subidos (excepto el directorio vacío)
+uploads/*
+!uploads/.gitkeep
+
+# Base de datos SQLite (si es relevante)
+*.db
+*.sqlite
+
+# Logs
+logs/
+*.log
+/generated/prisma
