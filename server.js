@@ -15,6 +15,10 @@ app.use('/api/users', usersRouter);
 const chatRouter = require('./routes/chat');
 app.use('/api/chat', chatRouter);
 
+// Si tienes filesRouter, usa esto:
+// const filesRouter = require('./routes/files');
+// app.use('/api/files', filesRouter);
+
 app.get('/', (req, res) => {
   res.json({ message: '¡Backend RAV iniciado correctamente!' });
 });

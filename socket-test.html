@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Socket.io Test</title>
+</head>
+<body>
+  <h1>Prueba de Socket.io</h1>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    socket.on('connect', () => {
+      console.log('Conectado al servidor Socket.io');
+    });
+  </script>
+</body>
+</html>
