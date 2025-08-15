@@ -4,7 +4,10 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Middleware para parsear JSON
 app.use(express.json());
+
+// CORS: permite peticiones desde tu frontend en Netlify
 app.use(cors({
   origin: 'https://rav-frontend.netlify.app'
 }));
