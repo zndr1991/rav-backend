@@ -18,4 +18,5 @@ pool.on('error', (err) => {
 
 module.exports = {
   query: (text, params) => pool.query(text, params),
+  pool // Exporta el pool por si lo necesitas directo
 };
