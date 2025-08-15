@@ -28,6 +28,17 @@ app.get('/', (req, res) => {
   res.json({ message: '¡Backend RAV iniciado correctamente!' });
 });
 
+// Endpoint de prueba para NeonDB
+app.get('/test-db', async (req, res) => {
+  try {
+    const db = require('./db-postgres');
+    const result = await db.query('SELECT NOW()');
+    res.json({ success: true, time: result.rows[0] });
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Servidor Express corriendo en http://localhost:${PORT}`);
 });
