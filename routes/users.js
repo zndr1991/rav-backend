@@ -26,6 +26,7 @@ router.get('/', verificarToken, async (req, res) => {
     const result = await db.query('SELECT id, nombre, email, rol FROM usuarios ORDER BY nombre ASC');
     res.json(result.rows);
   } catch (err) {
+    console.error('Error al obtener usuarios:', err);
     res.status(500).json({ error: 'Error al obtener usuarios: ' + err.message });
   }
 });
@@ -37,6 +38,7 @@ router.post('/register', verificarToken, async (req, res) => {
   }
   const { nombre, email, password, rol } = req.body;
   if (!nombre || !email || !password || !rol) {
+    console.error('Faltan datos requeridos:', req.body);
     return res.status(400).json({ error: 'Faltan datos requeridos' });
   }
   try {
@@ -51,6 +53,7 @@ router.post('/register', verificarToken, async (req, res) => {
     );
     res.status(201).json({ message: 'Usuario creado', usuario: result.rows[0] });
   } catch (err) {
+    console.error('Error interno al registrar usuario:', err);
     res.status(500).json({ error: 'Error interno al registrar usuario.' });
   }
 });
@@ -85,6 +88,7 @@ router.put('/:id', verificarToken, async (req, res) => {
     const actualizado = await db.query('SELECT id, nombre, email, rol FROM usuarios WHERE id = $1', [userId]);
     res.json({ message: 'Usuario actualizado', usuario: actualizado.rows[0] });
   } catch (err) {
+    console.error('Error en el servidor al editar usuario:', err);
     res.status(500).json({ error: 'Error en el servidor' });
   }
 });
@@ -99,6 +103,7 @@ router.delete('/:id', verificarToken, async (req, res) => {
     await db.query('DELETE FROM usuarios WHERE id = $1', [userId]);
     res.json({ message: 'Usuario eliminado' });
   } catch (err) {
+    console.error('Error en el servidor al borrar usuario:', err);
     res.status(500).json({ error: 'Error en el servidor' });
   }
 });
@@ -143,7 +148,7 @@ router.post('/login', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error interno al validar usuario:', error);
+    console.error('Error interno al validar usuario:', error); // <-- Aquí está el console.error
     return res.status(500).json({ error: 'Error interno al validar usuario.' });
   }
 });
