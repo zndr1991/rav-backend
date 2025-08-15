@@ -3,7 +3,6 @@ const jwt = require('jsonwebtoken');
 const router = express.Router();
 const db = require('../db-postgres');
 
-// Middleware de autenticación JWT
 const JWT_SECRET = process.env.JWT_SECRET || 'tu_clave_secreta';
 
 function verifyToken(req, res, next) {
@@ -16,7 +15,6 @@ function verifyToken(req, res, next) {
   });
 }
 
-// Obtener todos los mensajes del chat grupal (requiere autenticación)
 router.get('/group', verifyToken, async (req, res) => {
   try {
     const result = await db.query(
@@ -28,7 +26,6 @@ router.get('/group', verifyToken, async (req, res) => {
   }
 });
 
-// Enviar un mensaje al chat grupal (requiere autenticación)
 router.post('/group', verifyToken, async (req, res) => {
   const { usuario_id, nombre_usuario, texto } = req.body;
   if (!usuario_id || !nombre_usuario || !texto) {
@@ -42,7 +39,6 @@ router.post('/group', verifyToken, async (req, res) => {
     );
     const nuevoMensaje = result.rows[0];
 
-    // Emitir el mensaje a todos los clientes conectados con Socket.IO
     const io = req.app.get('io');
     if (io) {
       io.emit('nuevo-mensaje', nuevoMensaje);
@@ -54,15 +50,12 @@ router.post('/group', verifyToken, async (req, res) => {
   }
 });
 
-// Obtener cantidad de mensajes grupales sin leer para un usuario (NO cuenta los propios)
 router.get('/group/unread/:usuario_id', verifyToken, async (req, res) => {
   try {
     const usuario_id = req.params.usuario_id;
-    // Busca la última visita del usuario al chat grupal
     const userResult = await db.query('SELECT ultima_visita_grupal FROM usuarios WHERE id = $1', [usuario_id]);
     const ultimaVisita = userResult.rows[0]?.ultima_visita_grupal || new Date(0);
 
-    // Solo cuenta mensajes grupales que NO sean del propio usuario
     const result = await db.query(
       `SELECT COUNT(*) FROM mensajes WHERE fecha > $1 AND usuario_id <> $2`,
       [ultimaVisita, usuario_id]
@@ -73,7 +66,6 @@ router.get('/group/unread/:usuario_id', verifyToken, async (req, res) => {
   }
 });
 
-// Marcar como leídos (actualizar fecha de última visita)
 router.post('/group/visit', verifyToken, async (req, res) => {
   try {
     const usuario_id = req.body.usuario_id;
@@ -81,6 +73,19 @@ router.post('/group/visit', verifyToken, async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'Error al actualizar la última visita: ' + err.message });
+  }
+});
+
+// Borrar todos los mensajes del chat grupal (solo supervisor)
+router.delete('/group', verifyToken, async (req, res) => {
+  if (req.usuario.rol !== 'supervisor') {
+    return res.status(403).json({ error: 'Solo el supervisor puede borrar el chat.' });
+  }
+  try {
+    await db.query('DELETE FROM mensajes');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al borrar el chat: ' + err.message });
   }
 });
 

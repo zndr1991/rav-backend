@@ -1,34 +1,27 @@
 const express = require('express');
 const cors = require('cors');
+const http = require('http');
+const socketIo = require('socket.io');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middleware para parsear JSON
 app.use(express.json());
-
-// CORS: permite peticiones desde tu frontend en Netlify
 app.use(cors({
-  origin: 'https://rav-frontend.netlify.app'
+  origin: ['http://localhost:3000', 'https://rav-frontend.netlify.app']
 }));
 
-// Rutas de usuarios
+// Rutas
 const usersRouter = require('./routes/users');
 app.use('/api/users', usersRouter);
 
-// Rutas de chat general
 const chatRouter = require('./routes/chat');
 app.use('/api/chat', chatRouter);
-
-// Si tienes filesRouter, usa esto:
-// const filesRouter = require('./routes/files');
-// app.use('/api/files', filesRouter);
 
 app.get('/', (req, res) => {
   res.json({ message: '¡Backend RAV iniciado correctamente!' });
 });
 
-// Endpoint de prueba para NeonDB
 app.get('/test-db', async (req, res) => {
   try {
     const db = require('./db-postgres');
@@ -39,7 +32,26 @@ app.get('/test-db', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+// --- Socket.IO ---
+const server = http.createServer(app);
+const io = socketIo(server, {
+  cors: {
+    origin: ['http://localhost:3000', 'https://rav-frontend.netlify.app'],
+    methods: ['GET', 'POST', 'DELETE', 'PUT']
+  }
+});
+
+// Permite acceso a io desde las rutas
+app.set('io', io);
+
+io.on('connection', (socket) => {
+  console.log('Usuario conectado al chat');
+  socket.on('disconnect', () => {
+    console.log('Usuario desconectado');
+  });
+});
+
+server.listen(PORT, () => {
   console.log(`Servidor Express corriendo en http://localhost:${PORT}`);
 });
 
