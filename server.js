@@ -44,10 +44,35 @@ const io = socketIo(server, {
 // Permite acceso a io desde las rutas
 app.set('io', io);
 
+// --- Usuarios en línea ---
+let usuariosEnLinea = [];
+
 io.on('connection', (socket) => {
   console.log('Usuario conectado al chat');
+
+  // Recibe evento para marcar usuario en línea/fuera de línea
+  socket.on('usuario-en-linea', (data) => {
+    // Elimina si ya existe
+    usuariosEnLinea = usuariosEnLinea.filter(u => u.usuario_id !== data.usuario_id);
+    // Si está en línea, lo agrega
+    if (data.enLinea) {
+      usuariosEnLinea.push({ usuario_id: data.usuario_id, nombre: data.nombre });
+      socket.usuario_id = data.usuario_id; // Guarda el usuario en el socket
+    }
+    // Emite la lista actualizada a todos
+    io.emit('usuarios-en-linea', usuariosEnLinea);
+    // LOG para depuración
+    console.log('Usuarios en línea:', usuariosEnLinea);
+  });
+
   socket.on('disconnect', () => {
-    console.log('Usuario desconectado');
+    // Elimina al usuario desconectado solo si estaba en línea
+    if (socket.usuario_id) {
+      usuariosEnLinea = usuariosEnLinea.filter(u => u.usuario_id !== socket.usuario_id);
+      io.emit('usuarios-en-linea', usuariosEnLinea);
+      console.log('Usuario desconectado:', socket.usuario_id);
+      console.log('Usuarios en línea:', usuariosEnLinea);
+    }
   });
 });
 
