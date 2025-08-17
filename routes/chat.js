@@ -15,11 +15,10 @@ function verifyToken(req, res, next) {
   });
 }
 
-// Obtener todos los mensajes grupales
 router.get('/group', verifyToken, async (req, res) => {
   try {
     const result = await db.query(
-      `SELECT id, usuario_id, nombre_usuario, texto, fecha, editado, fecha_edicion, texto_original FROM mensajes ORDER BY fecha ASC`
+      `SELECT id, usuario_id, nombre_usuario, texto, fecha FROM mensajes ORDER BY fecha ASC`
     );
     res.json(result.rows);
   } catch (err) {
@@ -27,7 +26,6 @@ router.get('/group', verifyToken, async (req, res) => {
   }
 });
 
-// Enviar mensaje grupal
 router.post('/group', verifyToken, async (req, res) => {
   const { usuario_id, nombre_usuario, texto } = req.body;
   if (!usuario_id || !nombre_usuario || !texto) {
@@ -36,7 +34,7 @@ router.post('/group', verifyToken, async (req, res) => {
 
   try {
     const result = await db.query(
-      `INSERT INTO mensajes (usuario_id, nombre_usuario, texto, fecha, editado) VALUES ($1, $2, $3, $4, FALSE) RETURNING *`,
+      `INSERT INTO mensajes (usuario_id, nombre_usuario, texto, fecha) VALUES ($1, $2, $3, $4) RETURNING *`,
       [usuario_id, nombre_usuario, texto, new Date()]
     );
     const nuevoMensaje = result.rows[0];
@@ -52,75 +50,42 @@ router.post('/group', verifyToken, async (req, res) => {
   }
 });
 
-// Borrar mensaje por ID
-router.delete('/group/:id', verifyToken, async (req, res) => {
-  const mensajeId = req.params.id;
+router.get('/group/unread/:usuario_id', verifyToken, async (req, res) => {
   try {
-    const result = await db.query('SELECT * FROM mensajes WHERE id = $1', [mensajeId]);
-    const mensaje = result.rows[0];
-    if (!mensaje) return res.status(404).json({ error: 'Mensaje no encontrado.' });
+    const usuario_id = req.params.usuario_id;
+    const userResult = await db.query('SELECT ultima_visita_grupal FROM usuarios WHERE id = $1', [usuario_id]);
+    const ultimaVisita = userResult.rows[0]?.ultima_visita_grupal || new Date(0);
 
-    // Permisos: supervisor puede borrar cualquiera, usuario solo el suyo
-    if (
-      req.usuario.rol !== 'supervisor' &&
-      mensaje.usuario_id !== req.usuario.id
-    ) {
-      return res.status(403).json({ error: 'No tienes permiso para borrar este mensaje.' });
-    }
-
-    await db.query('DELETE FROM mensajes WHERE id = $1', [mensajeId]);
-
-    const io = req.app.get('io');
-    if (io) {
-      io.emit('mensaje-borrado', Number(mensajeId));
-    }
-
-    res.json({ ok: true });
+    const result = await db.query(
+      `SELECT COUNT(*) FROM mensajes WHERE fecha > $1 AND usuario_id <> $2`,
+      [ultimaVisita, usuario_id]
+    );
+    res.json({ sin_leer: parseInt(result.rows[0].count, 10) });
   } catch (err) {
-    res.status(500).json({ error: 'Error al borrar el mensaje: ' + err.message });
+    res.status(500).json({ error: 'Error al obtener mensajes sin leer: ' + err.message });
   }
 });
 
-// Editar mensaje por ID
-router.put('/group/:id', verifyToken, async (req, res) => {
-  const mensajeId = req.params.id;
-  const { texto } = req.body;
-  if (!texto) return res.status(400).json({ error: 'Texto requerido.' });
-
+router.post('/group/visit', verifyToken, async (req, res) => {
   try {
-    const result = await db.query('SELECT * FROM mensajes WHERE id = $1', [mensajeId]);
-    const mensaje = result.rows[0];
-    if (!mensaje) return res.status(404).json({ error: 'Mensaje no encontrado.' });
-
-    // Permisos: supervisor solo edita los suyos, usuario solo el suyo
-    if (mensaje.usuario_id !== req.usuario.id) {
-      return res.status(403).json({ error: 'No tienes permiso para editar este mensaje.' });
-    }
-
-    const fechaEdicion = new Date();
-    await db.query(
-      'UPDATE mensajes SET texto = $1, editado = TRUE, fecha_edicion = $2, texto_original = $3 WHERE id = $4',
-      [texto, fechaEdicion, mensaje.texto, mensajeId]
-    );
-
-    const io = req.app.get('io');
-    if (io) {
-      io.emit('mensaje-editado', {
-        id: Number(mensajeId),
-        texto,
-        editado: true,
-        fecha_edicion: fechaEdicion,
-        texto_original: mensaje.texto
-      });
-    }
-
-    res.json({
-      ok: true,
-      fecha_edicion: fechaEdicion,
-      texto_original: mensaje.texto
-    });
+    const usuario_id = req.body.usuario_id;
+    await db.query('UPDATE usuarios SET ultima_visita_grupal = $1 WHERE id = $2', [new Date(), usuario_id]);
+    res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: 'Error al editar el mensaje: ' + err.message });
+    res.status(500).json({ error: 'Error al actualizar la última visita: ' + err.message });
+  }
+});
+
+// Borrar todos los mensajes del chat grupal (solo supervisor)
+router.delete('/group', verifyToken, async (req, res) => {
+  if (req.usuario.rol !== 'supervisor') {
+    return res.status(403).json({ error: 'Solo el supervisor puede borrar el chat.' });
+  }
+  try {
+    await db.query('DELETE FROM mensajes');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al borrar el chat: ' + err.message });
   }
 });
 
