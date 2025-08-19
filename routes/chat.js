@@ -230,18 +230,30 @@ router.put('/private/:id', verifyToken, async (req, res) => {
 
 router.delete('/private/:id', verifyToken, async (req, res) => {
   const mensajeId = req.params.id;
+  console.log('Intentando borrar mensaje privado:', mensajeId, 'Usuario:', req.usuario.id);
   try {
     const result = await db.query('SELECT remitente_id FROM mensajes_privados WHERE id = $1', [mensajeId]);
+    console.log('Resultado SELECT:', result.rows);
     if (result.rows.length === 0) {
+      console.log('Mensaje no encontrado:', mensajeId);
       return res.status(404).json({ error: 'Mensaje privado no encontrado.' });
     }
     const mensaje = result.rows[0];
     if (req.usuario.id !== mensaje.remitente_id) {
+      console.log('Permiso denegado. Usuario:', req.usuario.id, 'Remitente:', mensaje.remitente_id);
       return res.status(403).json({ error: 'No tienes permiso para borrar este mensaje privado.' });
     }
     await db.query('DELETE FROM mensajes_privados WHERE id = $1', [mensajeId]);
+    // Emitir evento por socket.io para borrar en tiempo real en todos los clientes
+    const io = req.app.get('io');
+    if (io) {
+      console.log('Emitiendo evento mensaje-borrado-privado:', mensajeId);
+      io.emit('mensaje-borrado-privado', mensajeId);
+    }
+    console.log('Mensaje borrado correctamente:', mensajeId);
     res.json({ ok: true });
   } catch (err) {
+    console.log('Error al borrar mensaje privado:', err);
     res.status(500).json({ error: 'Error al borrar el mensaje privado: ' + err.message });
   }
 });

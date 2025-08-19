@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
@@ -40,6 +41,31 @@ const io = socketIo(server, {
     methods: ['GET', 'POST', 'DELETE', 'PUT']
   }
 });
+
+// --- Redis Adapter para Socket.IO ---
+if (process.env.REDIS_URL) {
+  const { pubClient, subClient, createAdapter } = require('./redis');
+  Promise.all([pubClient.connect(), subClient.connect()]).then(() => {
+    io.adapter(createAdapter(pubClient, subClient));
+    console.log('Socket.IO usando Redis Adapter');
+    pubClient.on('error', (err) => {
+      console.error('Redis pubClient error:', err);
+    });
+    subClient.on('error', (err) => {
+      console.error('Redis subClient error:', err);
+    });
+    pubClient.on('connect', () => {
+      console.log('Redis pubClient conectado');
+    });
+    subClient.on('connect', () => {
+      console.log('Redis subClient conectado');
+    });
+  }).catch(err => {
+    console.error('Error conectando a Redis:', err);
+  });
+} else {
+  console.log('REDIS_URL no está definida, Socket.IO funcionará sin Redis Adapter');
+}
 
 // Permite acceso a io desde las rutas
 app.set('io', io);
