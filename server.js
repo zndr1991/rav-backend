@@ -48,25 +48,20 @@ app.set('io', io);
 let usuariosEnLinea = [];
 
 io.on('connection', (socket) => {
-  console.log('Usuario conectado al chat');
+  console.log('Usuario conectado al chat:', socket.id);
 
   // Recibe evento para marcar usuario en línea/fuera de línea
   socket.on('usuario-en-linea', (data) => {
-    // Elimina si ya existe
     usuariosEnLinea = usuariosEnLinea.filter(u => u.usuario_id !== data.usuario_id);
-    // Si está en línea, lo agrega
     if (data.enLinea) {
       usuariosEnLinea.push({ usuario_id: data.usuario_id, nombre: data.nombre });
-      socket.usuario_id = data.usuario_id; // Guarda el usuario en el socket
+      socket.usuario_id = data.usuario_id;
     }
-    // Emite la lista actualizada a todos
     io.emit('usuarios-en-linea', usuariosEnLinea);
-    // LOG para depuración
     console.log('Usuarios en línea:', usuariosEnLinea);
   });
 
   socket.on('disconnect', () => {
-    // Elimina al usuario desconectado solo si estaba en línea
     if (socket.usuario_id) {
       usuariosEnLinea = usuariosEnLinea.filter(u => u.usuario_id !== socket.usuario_id);
       io.emit('usuarios-en-linea', usuariosEnLinea);
@@ -74,6 +69,20 @@ io.on('connection', (socket) => {
       console.log('Usuarios en línea:', usuariosEnLinea);
     }
   });
+
+  // --- Eventos de chat privado ---
+  socket.on('nuevo-mensaje-privado', (mensaje) => {
+    io.emit('nuevo-mensaje-privado', mensaje);
+    console.log('Emitido nuevo-mensaje-privado:', mensaje);
+  });
+
+  socket.on('mensaje-editado-privado', (mensajeEditado) => {
+    io.emit('mensaje-editado-privado', mensajeEditado);
+    console.log('Emitido mensaje-editado-privado:', mensajeEditado);
+  });
+
+  // --- Evento para borrar chat general en tiempo real ---
+  // Este evento no es necesario, el borrado se debe emitir desde la ruta DELETE en chat.js
 });
 
 server.listen(PORT, () => {

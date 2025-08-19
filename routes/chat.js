@@ -15,7 +15,8 @@ function verifyToken(req, res, next) {
   });
 }
 
-// Consulta de mensajes grupales, incluye editado y texto_anterior y fecha_editado
+// --- CHAT GRUPAL ---
+
 router.get('/group', verifyToken, async (req, res) => {
   try {
     const result = await db.query(
@@ -77,24 +78,28 @@ router.post('/group/visit', verifyToken, async (req, res) => {
   }
 });
 
-// Borrar todos los mensajes del chat grupal (solo supervisor)
+// --- Borrar todos los mensajes del chat general y emitir evento en tiempo real ---
 router.delete('/group', verifyToken, async (req, res) => {
   if (req.usuario.rol !== 'supervisor') {
     return res.status(403).json({ error: 'Solo el supervisor puede borrar el chat.' });
   }
   try {
     await db.query('DELETE FROM mensajes');
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('chat-general-borrado');
+      console.log('Emitido chat-general-borrado');
+    }
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'Error al borrar el chat: ' + err.message });
   }
 });
 
-// Borrar mensaje individual
+// --- Borrar mensaje individual y emitir evento en tiempo real ---
 router.delete('/group/:id', verifyToken, async (req, res) => {
   const mensajeId = req.params.id;
   try {
-    // Solo supervisor o dueño del mensaje puede borrar
     const result = await db.query('SELECT usuario_id FROM mensajes WHERE id = $1', [mensajeId]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Mensaje no encontrado.' });
@@ -104,18 +109,22 @@ router.delete('/group/:id', verifyToken, async (req, res) => {
       return res.status(403).json({ error: 'No tienes permiso para borrar este mensaje.' });
     }
     await db.query('DELETE FROM mensajes WHERE id = $1', [mensajeId]);
+    // Emitir evento de borrado de mensaje individual
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('mensaje-borrado', mensajeId);
+      console.log('Emitido mensaje-borrado', mensajeId); // LOG para depuración
+    }
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'Error al borrar el mensaje: ' + err.message });
   }
 });
 
-// Editar mensaje individual, guarda texto anterior y marca editado y fecha_editado
 router.put('/group/:id', verifyToken, async (req, res) => {
   const mensajeId = req.params.id;
   const { texto } = req.body;
   try {
-    // Solo dueño del mensaje puede editar (supervisor solo sus propios)
     const result = await db.query('SELECT usuario_id, texto FROM mensajes WHERE id = $1', [mensajeId]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Mensaje no encontrado.' });
@@ -129,7 +138,6 @@ router.put('/group/:id', verifyToken, async (req, res) => {
       'UPDATE mensajes SET texto = $1, editado = true, texto_anterior = $2, fecha_editado = $3 WHERE id = $4',
       [texto, mensaje.texto, fechaEditado, mensajeId]
     );
-    // Devuelve el mensaje editado para el socket
     const editado = await db.query(
       'SELECT id, usuario_id, nombre_usuario, texto, fecha, editado, texto_anterior, fecha_editado FROM mensajes WHERE id = $1',
       [mensajeId]
@@ -141,6 +149,100 @@ router.put('/group/:id', verifyToken, async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'Error al editar el mensaje: ' + err.message });
+  }
+});
+
+// --- CHAT PRIVADO ---
+
+router.get('/private', verifyToken, async (req, res) => {
+  const { usuario_id, destinatario_id } = req.query;
+  if (!usuario_id || !destinatario_id) {
+    return res.status(400).json({ error: 'Faltan usuario_id o destinatario_id.' });
+  }
+  try {
+    const result = await db.query(
+      `SELECT * FROM mensajes_privados
+       WHERE (remitente_id = $1 AND destinatario_id = $2)
+          OR (remitente_id = $2 AND destinatario_id = $1)
+       ORDER BY fecha ASC`,
+      [usuario_id, destinatario_id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Error al obtener mensajes privados: ' + err.message });
+  }
+});
+
+router.post('/private', verifyToken, async (req, res) => {
+  const { remitente_id, destinatario_id, texto } = req.body;
+  if (!remitente_id || !destinatario_id || !texto) {
+    return res.status(400).json({ error: 'Faltan datos obligatorios.' });
+  }
+  try {
+    const result = await db.query(
+      `INSERT INTO mensajes_privados (remitente_id, destinatario_id, texto, fecha, editado, texto_anterior, fecha_editado)
+       VALUES ($1, $2, $3, $4, false, '', null) RETURNING *`,
+      [remitente_id, destinatario_id, texto, new Date()]
+    );
+    const nuevoMensaje = result.rows[0];
+
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('nuevo-mensaje-privado', nuevoMensaje);
+    }
+
+    res.status(201).json(nuevoMensaje);
+  } catch (err) {
+    res.status(500).json({ error: 'Error al enviar mensaje privado: ' + err.message });
+  }
+});
+
+router.put('/private/:id', verifyToken, async (req, res) => {
+  const mensajeId = req.params.id;
+  const { texto } = req.body;
+  try {
+    const result = await db.query('SELECT remitente_id, texto FROM mensajes_privados WHERE id = $1', [mensajeId]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Mensaje privado no encontrado.' });
+    }
+    const mensaje = result.rows[0];
+    if (req.usuario.id !== mensaje.remitente_id) {
+      return res.status(403).json({ error: 'No tienes permiso para editar este mensaje privado.' });
+    }
+    const fechaEditado = new Date();
+    await db.query(
+      'UPDATE mensajes_privados SET texto = $1, editado = true, texto_anterior = $2, fecha_editado = $3 WHERE id = $4',
+      [texto, mensaje.texto, fechaEditado, mensajeId]
+    );
+    const editado = await db.query(
+      'SELECT * FROM mensajes_privados WHERE id = $1',
+      [mensajeId]
+    );
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('mensaje-editado-privado', editado.rows[0]);
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al editar el mensaje privado: ' + err.message });
+  }
+});
+
+router.delete('/private/:id', verifyToken, async (req, res) => {
+  const mensajeId = req.params.id;
+  try {
+    const result = await db.query('SELECT remitente_id FROM mensajes_privados WHERE id = $1', [mensajeId]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Mensaje privado no encontrado.' });
+    }
+    const mensaje = result.rows[0];
+    if (req.usuario.id !== mensaje.remitente_id) {
+      return res.status(403).json({ error: 'No tienes permiso para borrar este mensaje privado.' });
+    }
+    await db.query('DELETE FROM mensajes_privados WHERE id = $1', [mensajeId]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al borrar el mensaje privado: ' + err.message });
   }
 });
 

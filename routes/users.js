@@ -17,13 +17,11 @@ function verificarToken(req, res, next) {
   });
 }
 
-// Listar usuarios (solo supervisor)
+// Listar usuarios (permitido para cualquier usuario autenticado)
 router.get('/', verificarToken, async (req, res) => {
-  if (req.usuario.rol !== 'supervisor') {
-    return res.status(403).json({ error: 'Solo los supervisores pueden ver la lista de usuarios.' });
-  }
   try {
-    const result = await db.query('SELECT id, nombre, email, rol FROM usuarios ORDER BY nombre ASC');
+    // Solo enviamos id y nombre para usuarios normales
+    const result = await db.query('SELECT id, nombre FROM usuarios ORDER BY nombre ASC');
     res.json(result.rows);
   } catch (err) {
     console.error('Error al obtener usuarios:', err);
@@ -148,7 +146,7 @@ router.post('/login', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error interno al validar usuario:', error); // <-- Aquí está el console.error
+    console.error('Error interno al validar usuario:', error);
     return res.status(500).json({ error: 'Error interno al validar usuario.' });
   }
 });
