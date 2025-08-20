@@ -240,15 +240,12 @@ router.delete('/private/:id', verifyToken, async (req, res) => {
       return res.status(403).json({ error: 'No tienes permiso para borrar este mensaje privado.' });
     }
     await db.query('DELETE FROM mensajes_privados WHERE id = $1', [mensajeId]);
-<<<<<<< HEAD
     // Emitir evento por socket.io para borrar en tiempo real en todos los clientes
     const io = req.app.get('io');
     if (io) {
       io.emit('mensaje-borrado-privado', mensajeId);
     }
     console.log('Mensaje borrado correctamente:', mensajeId);
-=======
->>>>>>> fix-conflictos
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'Error al borrar el mensaje privado: ' + err.message });
