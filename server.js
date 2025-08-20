@@ -47,6 +47,12 @@ app.set('io', io);
 // --- Usuarios en línea ---
 let usuariosEnLinea = [];
 
+// Función para emitir usuarios en línea a todos los sockets
+function emitirUsuariosEnLinea() {
+  io.emit('usuarios-en-linea', usuariosEnLinea);
+  console.log('Usuarios en línea emitidos:', usuariosEnLinea);
+}
+
 io.on('connection', (socket) => {
   console.log('Usuario conectado al chat:', socket.id);
 
@@ -57,16 +63,18 @@ io.on('connection', (socket) => {
       usuariosEnLinea.push({ usuario_id: data.usuario_id, nombre: data.nombre });
       socket.usuario_id = data.usuario_id;
     }
-    io.emit('usuarios-en-linea', usuariosEnLinea);
-    console.log('Usuarios en línea:', usuariosEnLinea);
+    emitirUsuariosEnLinea();
   });
+
+  // Al conectar, si el frontend no envía usuario-en-linea, no se agrega.
+  // Puedes emitir la lista actual al conectar para asegurar sincronización:
+  socket.emit('usuarios-en-linea', usuariosEnLinea);
 
   socket.on('disconnect', () => {
     if (socket.usuario_id) {
       usuariosEnLinea = usuariosEnLinea.filter(u => u.usuario_id !== socket.usuario_id);
-      io.emit('usuarios-en-linea', usuariosEnLinea);
+      emitirUsuariosEnLinea();
       console.log('Usuario desconectado:', socket.usuario_id);
-      console.log('Usuarios en línea:', usuariosEnLinea);
     }
   });
 
