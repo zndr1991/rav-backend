@@ -17,6 +17,16 @@ function verificarToken(req, res, next) {
   });
 }
 
+// Ruta para obtener usuarios en línea (sin autenticación)
+router.get('/online', (req, res) => {
+  const io = req.app.get('io');
+  // usuariosEnLinea está en server.js, lo obtenemos del io
+  const usuariosEnLinea = io ? io.sockets.adapter.rooms['usuariosEnLinea'] || [] : [];
+  // Pero realmente la lista está en server.js como variable global, así que mejor accedemos así:
+  const usuarios = global.usuariosEnLinea || [];
+  res.json(usuarios);
+});
+
 // Listar usuarios (permitido para cualquier usuario autenticado)
 router.get('/', verificarToken, async (req, res) => {
   try {
