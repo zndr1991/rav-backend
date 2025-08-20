@@ -247,7 +247,6 @@ router.delete('/private/:id', verifyToken, async (req, res) => {
     // Emitir evento por socket.io para borrar en tiempo real en todos los clientes
     const io = req.app.get('io');
     if (io) {
-      console.log('Emitiendo evento mensaje-borrado-privado:', mensajeId);
       io.emit('mensaje-borrado-privado', mensajeId);
     }
     console.log('Mensaje borrado correctamente:', mensajeId);
