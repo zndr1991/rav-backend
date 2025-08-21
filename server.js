@@ -67,7 +67,6 @@ io.on('connection', (socket) => {
   });
 
   // Al conectar, si el frontend no envía usuario-en-linea, no se agrega.
-  // Puedes emitir la lista actual al conectar para asegurar sincronización:
   socket.emit('usuarios-en-linea', usuariosEnLinea);
 
   socket.on('disconnect', () => {
@@ -89,8 +88,11 @@ io.on('connection', (socket) => {
     console.log('Emitido mensaje-editado-privado:', mensajeEditado);
   });
 
-  // --- Evento para borrar chat general en tiempo real ---
-  // Este evento no es necesario, el borrado se debe emitir desde la ruta DELETE en chat.js
+  // Evento para borrar mensaje privado en tiempo real
+  socket.on('mensaje-borrado-privado', (data) => {
+    io.emit('mensaje-borrado-privado', data);
+    console.log('Emitido mensaje-borrado-privado:', data);
+  });
 });
 
 server.listen(PORT, () => {
