@@ -78,9 +78,19 @@ io.on('connection', (socket) => {
   });
 
   // --- Eventos de chat privado ---
+  // SOLO EMITIR AL DESTINATARIO Y REMITENTE UNA SOLA VEZ POR USUARIO
   socket.on('nuevo-mensaje-privado', (mensaje) => {
-    io.emit('nuevo-mensaje-privado', mensaje);
-    console.log('Emitido nuevo-mensaje-privado:', mensaje);
+    const enviados = new Set();
+    for (const [id, s] of io.sockets.sockets) {
+      if (
+        (s.usuario_id === mensaje.destinatario_id && !enviados.has(s.usuario_id)) ||
+        (s.usuario_id === mensaje.remitente_id && !enviados.has(s.usuario_id))
+      ) {
+        s.emit('nuevo-mensaje-privado', mensaje);
+        enviados.add(s.usuario_id);
+      }
+    }
+    console.log('Emitido nuevo-mensaje-privado SOLO a destinatario y remitente:', mensaje);
   });
 
   socket.on('mensaje-editado-privado', (mensajeEditado) => {
