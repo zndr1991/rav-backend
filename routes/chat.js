@@ -180,8 +180,8 @@ router.post('/private', verifyToken, async (req, res) => {
   }
   try {
     const result = await db.query(
-      `INSERT INTO mensajes_privados (remitente_id, destinatario_id, texto, fecha, editado, texto_anterior, fecha_editado)
-       VALUES ($1, $2, $3, $4, false, '', null) RETURNING *`,
+      `INSERT INTO mensajes_privados (remitente_id, destinatario_id, texto, fecha, editado, texto_anterior, fecha_editado, leido)
+       VALUES ($1, $2, $3, $4, false, '', null, false) RETURNING *`,
       [remitente_id, destinatario_id, texto, new Date()]
     );
     const nuevoMensaje = result.rows[0];
@@ -194,6 +194,29 @@ router.post('/private', verifyToken, async (req, res) => {
     res.status(201).json(nuevoMensaje);
   } catch (err) {
     res.status(500).json({ error: 'Error al enviar mensaje privado: ' + err.message });
+  }
+});
+
+// Ruta para obtener los mensajes privados no leídos por remitente
+router.get('/private/unread/:usuario_id', verifyToken, async (req, res) => {
+  const usuario_id = req.params.usuario_id;
+  try {
+    // Busca los mensajes privados no leídos para el usuario actual
+    const result = await db.query(
+      `SELECT remitente_id, COUNT(*) as cantidad
+       FROM mensajes_privados
+       WHERE destinatario_id = $1 AND (leido IS NULL OR leido = false)
+       GROUP BY remitente_id`,
+      [usuario_id]
+    );
+    // Formatea la respuesta como { noLeidos: { remitenteId: cantidad, ... } }
+    const noLeidos = {};
+    result.rows.forEach(row => {
+      noLeidos[row.remitente_id] = parseInt(row.cantidad, 10);
+    });
+    res.json({ noLeidos });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al obtener mensajes privados no leídos: ' + err.message });
   }
 });
 
@@ -249,6 +272,25 @@ router.delete('/private/:id', verifyToken, async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'Error al borrar el mensaje privado: ' + err.message });
+  }
+});
+
+// Marcar mensajes privados como leídos cuando el usuario abre el chat privado
+router.post('/private/read', verifyToken, async (req, res) => {
+  const { usuario_id, remitente_id } = req.body;
+  if (!usuario_id || !remitente_id) {
+    return res.status(400).json({ error: 'Faltan usuario_id o remitente_id.' });
+  }
+  try {
+    await db.query(
+      `UPDATE mensajes_privados
+       SET leido = true
+       WHERE destinatario_id = $1 AND remitente_id = $2 AND (leido IS NULL OR leido = false)`,
+      [usuario_id, remitente_id]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al marcar mensajes como leídos: ' + err.message });
   }
 });
 
