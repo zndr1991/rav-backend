@@ -60,8 +60,13 @@ io.on('connection', (socket) => {
   socket.on('usuario-en-linea', (data) => {
     usuariosEnLinea = usuariosEnLinea.filter(u => u.usuario_id !== data.usuario_id);
     if (data.enLinea) {
-      usuariosEnLinea.push({ usuario_id: data.usuario_id, nombre: data.nombre });
+      usuariosEnLinea.push({
+        usuario_id: data.usuario_id,
+        nombre: data.nombre,
+        manual: !!data.manual // <-- Solo si fue manual
+      });
       socket.usuario_id = data.usuario_id;
+      socket.manual = !!data.manual;
     }
     emitirUsuariosEnLinea();
   });
@@ -83,8 +88,8 @@ io.on('connection', (socket) => {
     const enviados = new Set();
     for (const [id, s] of io.sockets.sockets) {
       if (
-        (s.usuario_id === mensaje.destinatario_id && !enviados.has(s.usuario_id)) ||
-        (s.usuario_id === mensaje.remitente_id && !enviados.has(s.usuario_id))
+        (s.usuario_id === mensaje.destinatario_id || s.usuario_id === mensaje.remitente_id) &&
+        !enviados.has(s.usuario_id)
       ) {
         s.emit('nuevo-mensaje-privado', mensaje);
         enviados.add(s.usuario_id);
