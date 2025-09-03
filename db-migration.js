@@ -42,24 +42,38 @@ db.serialize(() => {
           console.log("✅ Columna leido añadida correctamente.");
         }
         
-        // 4. Actualizar mensajes existentes: marcarlos como leídos y como generales
-        db.run(`UPDATE mensajes SET leido = 1, es_general = 1 WHERE es_general IS NULL OR leido IS NULL`, (err) => {
+        // 4. Intentar agregar columna archivo_url si no existe
+        db.run("ALTER TABLE mensajes ADD COLUMN archivo_url TEXT", (err) => {
           if (err) {
-            console.error("Error al actualizar mensajes existentes:", err.message);
+            // Ignorar error si la columna ya existe
+            if (err.message.includes('duplicate column name')) {
+              console.log("La columna archivo_url ya existe.");
+            } else {
+              console.error("Error al añadir columna archivo_url:", err.message);
+            }
           } else {
-            console.log("✅ Mensajes existentes actualizados correctamente.");
+            console.log("✅ Columna archivo_url añadida correctamente.");
           }
           
-          console.log("Migración completada. La base de datos está lista para chat privado.");
-          
-          // 5. Cerrar la conexión cuando termine todo
-          db.close((err) => {
+          // 5. Actualizar mensajes existentes: marcarlos como leídos y como generales
+          db.run(`UPDATE mensajes SET leido = 1, es_general = 1 WHERE es_general IS NULL OR leido IS NULL`, (err) => {
             if (err) {
-              console.error("Error al cerrar la base de datos:", err.message);
+              console.error("Error al actualizar mensajes existentes:", err.message);
             } else {
-              console.log("Base de datos cerrada correctamente.");
+              console.log("✅ Mensajes existentes actualizados correctamente.");
             }
-            process.exit(0);
+            
+            console.log("Migración completada. La base de datos está lista para chat privado.");
+            
+            // 6. Cerrar la conexión cuando termine todo
+            db.close((err) => {
+              if (err) {
+                console.error("Error al cerrar la base de datos:", err.message);
+              } else {
+                console.log("Base de datos cerrada correctamente.");
+              }
+              process.exit(0);
+            });
           });
         });
       });

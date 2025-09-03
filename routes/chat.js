@@ -2,8 +2,24 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const router = express.Router();
 const db = require('../db-postgres');
+const path = require('path');
+const multer = require('multer');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'tu_clave_secreta';
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, path.join(__dirname, '../uploads'));
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + '-' + file.originalname);
+  }
+});
+const upload = multer({ storage });
+
+// Middleware para múltiples archivos
+const uploadMultiple = upload.array('archivos', 10); // hasta 10 archivos por mensaje
 
 function verifyToken(req, res, next) {
   const token = req.headers['authorization'];
@@ -20,26 +36,37 @@ function verifyToken(req, res, next) {
 router.get('/group', verifyToken, async (req, res) => {
   try {
     const result = await db.query(
-      `SELECT id, usuario_id, nombre_usuario, texto, fecha, editado, texto_anterior, fecha_editado FROM mensajes ORDER BY fecha ASC`
+      `SELECT id, usuario_id, nombre_usuario, texto, archivo_url, fecha, editado, texto_anterior, fecha_editado FROM mensajes ORDER BY fecha ASC`
     );
-    res.json(result.rows);
+    // Parsear archivo_url a array para cada mensaje
+    const mensajes = result.rows.map(msg => ({
+      ...msg,
+      archivo_url: msg.archivo_url ? JSON.parse(msg.archivo_url) : []
+    }));
+    res.json(mensajes);
   } catch (err) {
     res.status(500).json({ error: 'Error al obtener mensajes: ' + err.message });
   }
 });
 
-router.post('/group', verifyToken, async (req, res) => {
+router.post('/group', verifyToken, uploadMultiple, async (req, res) => {
   const { usuario_id, nombre_usuario, texto } = req.body;
-  if (!usuario_id || !nombre_usuario || !texto) {
-    return res.status(400).json({ error: 'Faltan datos obligatorios.' });
+  let archivosUrls = [];
+  if (req.files && req.files.length > 0) {
+    archivosUrls = req.files.map(file => `/uploads/${file.filename}`);
+  }
+  if (!usuario_id || !nombre_usuario || (!texto && archivosUrls.length === 0)) {
+    return res.status(400).json({ error: 'Debes enviar texto, archivos o ambos.' });
   }
 
   try {
     const result = await db.query(
-      `INSERT INTO mensajes (usuario_id, nombre_usuario, texto, fecha, editado, texto_anterior, fecha_editado) VALUES ($1, $2, $3, $4, false, '', null) RETURNING *`,
-      [usuario_id, nombre_usuario, texto, new Date()]
+      `INSERT INTO mensajes (usuario_id, nombre_usuario, texto, archivo_url, fecha, editado, texto_anterior, fecha_editado) VALUES ($1, $2, $3, $4, $5, false, '', null) RETURNING *`,
+      [usuario_id, nombre_usuario, texto || '', JSON.stringify(archivosUrls), new Date()]
     );
     const nuevoMensaje = result.rows[0];
+    // Parsear archivo_url para frontend
+    nuevoMensaje.archivo_url = JSON.parse(nuevoMensaje.archivo_url || '[]');
 
     const io = req.app.get('io');
     if (io) {
@@ -167,24 +194,56 @@ router.get('/private', verifyToken, async (req, res) => {
        ORDER BY fecha ASC`,
       [usuario_id, destinatario_id]
     );
-    res.json(result.rows);
+    // Parsear archivo_url como array para cada mensaje, robusto ante null, vacío o malformado
+    const mensajes = result.rows.map(msg => {
+      let archivos = [];
+      if (msg.archivo_url) {
+        try {
+          archivos = JSON.parse(msg.archivo_url);
+          if (!Array.isArray(archivos)) archivos = [];
+        } catch {
+          archivos = [];
+        }
+      }
+      return {
+        ...msg,
+        archivo_url: archivos
+      };
+    });
+    res.json(mensajes);
   } catch (err) {
     res.status(500).json({ error: 'Error al obtener mensajes privados: ' + err.message });
   }
 });
 
-router.post('/private', verifyToken, async (req, res) => {
+router.post('/private', verifyToken, uploadMultiple, async (req, res) => {
   const { remitente_id, destinatario_id, texto } = req.body;
-  if (!remitente_id || !destinatario_id || !texto) {
+  let archivosUrls = [];
+  if (req.files && req.files.length > 0) {
+    archivosUrls = req.files.map(file => ({
+      nombre: file.originalname,
+      url: `/uploads/${file.filename}`,
+      tipo: file.mimetype
+    }));
+  }
+  if (!remitente_id || !destinatario_id || (!texto && archivosUrls.length === 0)) {
     return res.status(400).json({ error: 'Faltan datos obligatorios.' });
   }
   try {
+    const remitenteRes = await db.query('SELECT nombre, email FROM usuarios WHERE id = $1', [remitente_id]);
+    let nombre_remitente = 'Desconocido';
+    if (remitenteRes.rows.length > 0) {
+      nombre_remitente = remitenteRes.rows[0].nombre || remitenteRes.rows[0].email || 'Desconocido';
+    }
+
     const result = await db.query(
-      `INSERT INTO mensajes_privados (remitente_id, destinatario_id, texto, fecha, editado, texto_anterior, fecha_editado, leido)
-       VALUES ($1, $2, $3, $4, false, '', null, false) RETURNING *`,
-      [remitente_id, destinatario_id, texto, new Date()]
+      `INSERT INTO mensajes_privados (remitente_id, destinatario_id, texto, archivo_url, fecha, editado, texto_anterior, fecha_editado, leido)
+       VALUES ($1, $2, $3, $4, $5, false, '', null, false) RETURNING *`,
+      [remitente_id, destinatario_id, texto || '', JSON.stringify(archivosUrls), new Date()]
     );
     const nuevoMensaje = result.rows[0];
+    nuevoMensaje.nombre_remitente = nombre_remitente;
+    nuevoMensaje.archivo_url = archivosUrls;
 
     const io = req.app.get('io');
     if (io) {
@@ -222,9 +281,9 @@ router.get('/private/unread/:usuario_id', verifyToken, async (req, res) => {
 
 router.put('/private/:id', verifyToken, async (req, res) => {
   const mensajeId = req.params.id;
-  const { texto } = req.body;
+  const { texto, archivo_url } = req.body;
   try {
-    const result = await db.query('SELECT remitente_id, texto FROM mensajes_privados WHERE id = $1', [mensajeId]);
+    const result = await db.query('SELECT remitente_id, texto, archivo_url FROM mensajes_privados WHERE id = $1', [mensajeId]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Mensaje privado no encontrado.' });
     }
@@ -233,10 +292,27 @@ router.put('/private/:id', verifyToken, async (req, res) => {
       return res.status(403).json({ error: 'No tienes permiso para editar este mensaje privado.' });
     }
     const fechaEditado = new Date();
-    await db.query(
-      'UPDATE mensajes_privados SET texto = $1, editado = true, texto_anterior = $2, fecha_editado = $3 WHERE id = $4',
-      [texto, mensaje.texto, fechaEditado, mensajeId]
-    );
+
+    // Si solo se envía archivo_url, no modificar texto ni editado
+    if (typeof archivo_url !== 'undefined' && typeof texto === 'undefined') {
+      await db.query(
+        'UPDATE mensajes_privados SET archivo_url = $1 WHERE id = $2',
+        [JSON.stringify(archivo_url), mensajeId]
+      );
+    } else {
+      // Si se envía texto y/o archivo_url, actualizar ambos
+      await db.query(
+        'UPDATE mensajes_privados SET texto = $1, archivo_url = $2, editado = true, texto_anterior = $3, fecha_editado = $4 WHERE id = $5',
+        [
+          typeof texto !== 'undefined' ? texto : mensaje.texto,
+          typeof archivo_url !== 'undefined' ? JSON.stringify(archivo_url) : mensaje.archivo_url,
+          mensaje.texto,
+          fechaEditado,
+          mensajeId
+        ]
+      );
+    }
+
     const editado = await db.query(
       'SELECT * FROM mensajes_privados WHERE id = $1',
       [mensajeId]
@@ -291,6 +367,88 @@ router.post('/private/read', verifyToken, async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'Error al marcar mensajes como leídos: ' + err.message });
+  }
+});
+
+// Eliminar adjunto de mensaje grupal
+router.post('/group/eliminar-adjunto', verifyToken, async (req, res) => {
+  const { mensajeId, adjuntoIdx } = req.body;
+  try {
+    // Obtener mensaje actual
+    const result = await db.query('SELECT usuario_id, archivo_url FROM mensajes WHERE id = $1', [mensajeId]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Mensaje no encontrado' });
+    const mensaje = result.rows[0];
+    // Solo el autor o el supervisor pueden eliminar adjuntos
+    if (req.usuario.rol !== 'supervisor' && req.usuario.id !== mensaje.usuario_id) {
+      return res.status(403).json({ error: 'No tienes permiso para eliminar adjuntos de este mensaje.' });
+    }
+    let archivos = JSON.parse(mensaje.archivo_url || '[]');
+    if (adjuntoIdx < 0 || adjuntoIdx >= archivos.length) return res.status(400).json({ error: 'Índice inválido' });
+    archivos.splice(adjuntoIdx, 1);
+    await db.query('UPDATE mensajes SET archivo_url = $1 WHERE id = $2', [JSON.stringify(archivos), mensajeId]);
+    // Emitir evento de actualización de adjuntos
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('adjunto-eliminado', { mensajeId, adjuntoIdx });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al eliminar adjunto' });
+  }
+});
+
+// --- Adjuntos para mensajes privados ---
+
+// Subir adjunto a mensaje privado
+router.post('/privado/subir-adjunto', verifyToken, multer({ dest: 'uploads/' }).array('archivos'), async (req, res) => {
+  const { mensajeId } = req.body;
+  try {
+    // Obtener mensaje actual
+    const result = await db.query('SELECT archivo_url FROM mensajes_privados WHERE id = $1', [mensajeId]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Mensaje no encontrado' });
+    let archivos = [];
+    if (result.rows[0].archivo_url) {
+      archivos = JSON.parse(result.rows[0].archivo_url);
+    }
+    // Agregar nuevos archivos
+    req.files.forEach(file => {
+      archivos.push({
+        nombre: file.originalname,
+        url: `/uploads/${file.filename}`,
+        tipo: file.mimetype
+      });
+    });
+    await db.query('UPDATE mensajes_privados SET archivo_url = $1 WHERE id = $2', [JSON.stringify(archivos), mensajeId]);
+    res.json({ ok: true, archivos });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al subir adjunto privado' });
+  }
+});
+
+// Eliminar adjunto de mensaje privado
+router.post('/privado/eliminar-adjunto', verifyToken, async (req, res) => {
+  const { mensajeId, adjuntoIdx } = req.body;
+  try {
+    const result = await db.query('SELECT remitente_id, archivo_url FROM mensajes_privados WHERE id = $1', [mensajeId]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Mensaje no encontrado' });
+    const mensaje = result.rows[0];
+    if (req.usuario.rol !== 'supervisor' && req.usuario.id !== mensaje.remitente_id) {
+      return res.status(403).json({ error: 'No tienes permiso para eliminar adjuntos de este mensaje.' });
+    }
+    let archivos = JSON.parse(mensaje.archivo_url || '[]');
+    if (adjuntoIdx < 0 || adjuntoIdx >= archivos.length) return res.status(400).json({ error: 'Índice inválido' });
+    archivos.splice(adjuntoIdx, 1);
+    await db.query('UPDATE mensajes_privados SET archivo_url = $1 WHERE id = $2', [JSON.stringify(archivos), mensajeId]);
+
+    // Emitir evento por socket para tiempo real
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('adjunto-eliminado-privado', { mensajeId, adjuntoIdx });
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al eliminar adjunto privado' });
   }
 });
 

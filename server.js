@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const http = require('http');
 const socketIo = require('socket.io');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -10,6 +11,9 @@ app.use(express.json());
 app.use(cors({
   origin: ['http://localhost:3000', 'https://rav-frontend.netlify.app']
 }));
+
+// Servir archivos estáticos desde la carpeta uploads
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Rutas
 const usersRouter = require('./routes/users');
