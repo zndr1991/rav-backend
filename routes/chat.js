@@ -62,7 +62,7 @@ router.post('/group', verifyToken, uploadMultiple, async (req, res) => {
   try {
     const result = await db.query(
       `INSERT INTO mensajes (usuario_id, nombre_usuario, texto, archivo_url, fecha, editado, texto_anterior, fecha_editado) VALUES ($1, $2, $3, $4, $5, false, '', null) RETURNING *`,
-      [usuario_id, nombre_usuario, texto || '', JSON.stringify(archivosUrls), new Date()]
+      [usuario_id, nombre_usuario, texto || '', JSON.stringify(archivosUrls), new Date().toISOString()]
     );
     const nuevoMensaje = result.rows[0];
     // Parsear archivo_url para frontend
@@ -239,7 +239,7 @@ router.post('/private', verifyToken, uploadMultiple, async (req, res) => {
     const result = await db.query(
       `INSERT INTO mensajes_privados (remitente_id, destinatario_id, texto, archivo_url, fecha, editado, texto_anterior, fecha_editado, leido)
        VALUES ($1, $2, $3, $4, $5, false, '', null, false) RETURNING *`,
-      [remitente_id, destinatario_id, texto || '', JSON.stringify(archivosUrls), new Date()]
+      [remitente_id, destinatario_id, texto || '', JSON.stringify(archivosUrls), new Date().toISOString()]
     );
     const nuevoMensaje = result.rows[0];
     nuevoMensaje.nombre_remitente = nombre_remitente;
