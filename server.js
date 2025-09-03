@@ -60,6 +60,11 @@ function emitirUsuariosEnLinea() {
 io.on('connection', (socket) => {
   console.log('Usuario conectado al chat:', socket.id);
 
+    socket.on('join', (userId) => {
+    socket.join(userId);
+    console.log(`Socket ${socket.id} unido a la room de usuario ${userId}`);
+  });
+
   // Recibe evento para marcar usuario en línea/fuera de línea
   socket.on('usuario-en-linea', (data) => {
     usuariosEnLinea = usuariosEnLinea.filter(u => u.usuario_id !== data.usuario_id);

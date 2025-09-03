@@ -429,7 +429,8 @@ router.post('/privado/subir-adjunto', verifyToken, multer({ dest: 'uploads/' }).
 router.post('/privado/eliminar-adjunto', verifyToken, async (req, res) => {
   const { mensajeId, adjuntoIdx } = req.body;
   try {
-    const result = await db.query('SELECT remitente_id, archivo_url FROM mensajes_privados WHERE id = $1', [mensajeId]);
+    // Incluye destinatario_id en la consulta
+    const result = await db.query('SELECT remitente_id, destinatario_id, archivo_url FROM mensajes_privados WHERE id = $1', [mensajeId]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Mensaje no encontrado' });
     const mensaje = result.rows[0];
     if (req.usuario.rol !== 'supervisor' && req.usuario.id !== mensaje.remitente_id) {
@@ -440,10 +441,14 @@ router.post('/privado/eliminar-adjunto', verifyToken, async (req, res) => {
     archivos.splice(adjuntoIdx, 1);
     await db.query('UPDATE mensajes_privados SET archivo_url = $1 WHERE id = $2', [JSON.stringify(archivos), mensajeId]);
 
-    // Emitir evento por socket para tiempo real
+    // Emitir evento por socket para tiempo real SOLO a los dos usuarios
     const io = req.app.get('io');
     if (io) {
-      io.emit('adjunto-eliminado-privado', { mensajeId, adjuntoIdx });
+      // Envía el evento solo al remitente y destinatario
+      io.to(mensaje.remitente_id.toString()).emit('adjunto-eliminado-privado', { mensajeId, adjuntoIdx });
+      if (mensaje.destinatario_id) {
+        io.to(mensaje.destinatario_id.toString()).emit('adjunto-eliminado-privado', { mensajeId, adjuntoIdx });
+      }
     }
 
     res.json({ ok: true });
