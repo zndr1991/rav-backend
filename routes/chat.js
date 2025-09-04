@@ -247,7 +247,8 @@ router.post('/private', verifyToken, uploadMultiple, async (req, res) => {
 
     const io = req.app.get('io');
     if (io) {
-      io.emit('nuevo-mensaje-privado', nuevoMensaje);
+      io.to(remitente_id.toString()).emit('nuevo-mensaje-privado', nuevoMensaje);
+      io.to(destinatario_id.toString()).emit('nuevo-mensaje-privado', nuevoMensaje);
     }
 
     res.status(201).json(nuevoMensaje);
