@@ -320,7 +320,8 @@ router.put('/private/:id', verifyToken, async (req, res) => {
     );
     const io = req.app.get('io');
     if (io) {
-      io.emit('mensaje-editado-privado', editado.rows[0]);
+      io.to(editado.rows[0].remitente_id.toString()).emit('mensaje-editado-privado', editado.rows[0]);
+      io.to(editado.rows[0].destinatario_id.toString()).emit('mensaje-editado-privado', editado.rows[0]);
     }
     res.json({ ok: true });
   } catch (err) {
@@ -343,7 +344,10 @@ router.delete('/private/:id', verifyToken, async (req, res) => {
     // Emitir evento por socket.io para borrar en tiempo real en todos los clientes
     const io = req.app.get('io');
     if (io) {
-      io.emit('mensaje-borrado-privado', mensajeId);
+      io.to(mensaje.remitente_id.toString()).emit('mensaje-borrado-privado', { id: mensajeId, remitente_id: mensaje.remitente_id, destinatario_id: mensaje.destinatario_id });
+      if (mensaje.destinatario_id) {
+        io.to(mensaje.destinatario_id.toString()).emit('mensaje-borrado-privado', { id: mensajeId, remitente_id: mensaje.remitente_id, destinatario_id: mensaje.destinatario_id });
+      }
     }
     console.log('Mensaje borrado correctamente:', mensajeId);
     res.json({ ok: true });
