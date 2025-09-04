@@ -99,14 +99,16 @@ io.on('connection', (socket) => {
     console.log('Emitido nuevo-mensaje-privado SOLO a destinatario y remitente:', mensaje);
   });
   socket.on('mensaje-editado-privado', (mensajeEditado) => {
-    io.emit('mensaje-editado-privado', mensajeEditado);
-    console.log('Emitido mensaje-editado-privado:', mensajeEditado);
+    io.to(mensajeEditado.destinatario_id.toString()).emit('mensaje-editado-privado', mensajeEditado);
+    io.to(mensajeEditado.remitente_id.toString()).emit('mensaje-editado-privado', mensajeEditado);
+    console.log('Emitido mensaje-editado-privado SOLO a destinatario y remitente:', mensajeEditado);
   });
 
   // Evento para borrar mensaje privado en tiempo real
   socket.on('mensaje-borrado-privado', (data) => {
-    io.emit('mensaje-borrado-privado', data);
-    console.log('Emitido mensaje-borrado-privado:', data);
+    io.to(data.destinatario_id.toString()).emit('mensaje-borrado-privado', data);
+    io.to(data.remitente_id.toString()).emit('mensaje-borrado-privado', data);
+    console.log('Emitido mensaje-borrado-privado SOLO a destinatario y remitente:', data);
   });
 });
 
