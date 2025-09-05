@@ -94,21 +94,28 @@ io.on('connection', (socket) => {
   // --- Eventos de chat privado ---
   // SOLO EMITIR AL DESTINATARIO Y REMITENTE UNA SOLA VEZ POR USUARIO
   socket.on('nuevo-mensaje-privado', (mensaje) => {
-    io.to(mensaje.destinatario_id.toString()).emit('nuevo-mensaje-privado', mensaje);
-    io.to(mensaje.remitente_id.toString()).emit('nuevo-mensaje-privado', mensaje);
+    const enviados = new Set();
+    for (const [id, s] of io.sockets.sockets) {
+      if (
+        (s.usuario_id === mensaje.destinatario_id || s.usuario_id === mensaje.remitente_id) &&
+        !enviados.has(s.usuario_id)
+      ) {
+        s.emit('nuevo-mensaje-privado', mensaje);
+        enviados.add(s.usuario_id);
+      }
+    }
     console.log('Emitido nuevo-mensaje-privado SOLO a destinatario y remitente:', mensaje);
   });
+
   socket.on('mensaje-editado-privado', (mensajeEditado) => {
-    io.to(mensajeEditado.destinatario_id.toString()).emit('mensaje-editado-privado', mensajeEditado);
-    io.to(mensajeEditado.remitente_id.toString()).emit('mensaje-editado-privado', mensajeEditado);
-    console.log('Emitido mensaje-editado-privado SOLO a destinatario y remitente:', mensajeEditado);
+    io.emit('mensaje-editado-privado', mensajeEditado);
+    console.log('Emitido mensaje-editado-privado:', mensajeEditado);
   });
 
   // Evento para borrar mensaje privado en tiempo real
   socket.on('mensaje-borrado-privado', (data) => {
-    io.to(data.destinatario_id.toString()).emit('mensaje-borrado-privado', data);
-    io.to(data.remitente_id.toString()).emit('mensaje-borrado-privado', data);
-    console.log('Emitido mensaje-borrado-privado SOLO a destinatario y remitente:', data);
+    io.emit('mensaje-borrado-privado', data);
+    console.log('Emitido mensaje-borrado-privado:', data);
   });
 });
 

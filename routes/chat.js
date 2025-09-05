@@ -62,7 +62,7 @@ router.post('/group', verifyToken, uploadMultiple, async (req, res) => {
   try {
     const result = await db.query(
       `INSERT INTO mensajes (usuario_id, nombre_usuario, texto, archivo_url, fecha, editado, texto_anterior, fecha_editado) VALUES ($1, $2, $3, $4, $5, false, '', null) RETURNING *`,
-      [usuario_id, nombre_usuario, texto || '', JSON.stringify(archivosUrls), new Date().toISOString()]
+      [usuario_id, nombre_usuario, texto || '', JSON.stringify(archivosUrls), new Date()]
     );
     const nuevoMensaje = result.rows[0];
     // Parsear archivo_url para frontend
@@ -239,7 +239,7 @@ router.post('/private', verifyToken, uploadMultiple, async (req, res) => {
     const result = await db.query(
       `INSERT INTO mensajes_privados (remitente_id, destinatario_id, texto, archivo_url, fecha, editado, texto_anterior, fecha_editado, leido)
        VALUES ($1, $2, $3, $4, $5, false, '', null, false) RETURNING *`,
-      [remitente_id, destinatario_id, texto || '', JSON.stringify(archivosUrls), new Date().toISOString()]
+      [remitente_id, destinatario_id, texto || '', JSON.stringify(archivosUrls), new Date()]
     );
     const nuevoMensaje = result.rows[0];
     nuevoMensaje.nombre_remitente = nombre_remitente;
@@ -247,8 +247,7 @@ router.post('/private', verifyToken, uploadMultiple, async (req, res) => {
 
     const io = req.app.get('io');
     if (io) {
-      io.to(remitente_id.toString()).emit('nuevo-mensaje-privado', nuevoMensaje);
-      io.to(destinatario_id.toString()).emit('nuevo-mensaje-privado', nuevoMensaje);
+      io.emit('nuevo-mensaje-privado', nuevoMensaje);
     }
 
     res.status(201).json(nuevoMensaje);
@@ -320,8 +319,7 @@ router.put('/private/:id', verifyToken, async (req, res) => {
     );
     const io = req.app.get('io');
     if (io) {
-      io.to(editado.rows[0].remitente_id.toString()).emit('mensaje-editado-privado', editado.rows[0]);
-      io.to(editado.rows[0].destinatario_id.toString()).emit('mensaje-editado-privado', editado.rows[0]);
+      io.emit('mensaje-editado-privado', editado.rows[0]);
     }
     res.json({ ok: true });
   } catch (err) {
@@ -344,10 +342,7 @@ router.delete('/private/:id', verifyToken, async (req, res) => {
     // Emitir evento por socket.io para borrar en tiempo real en todos los clientes
     const io = req.app.get('io');
     if (io) {
-      io.to(mensaje.remitente_id.toString()).emit('mensaje-borrado-privado', { id: mensajeId, remitente_id: mensaje.remitente_id, destinatario_id: mensaje.destinatario_id });
-      if (mensaje.destinatario_id) {
-        io.to(mensaje.destinatario_id.toString()).emit('mensaje-borrado-privado', { id: mensajeId, remitente_id: mensaje.remitente_id, destinatario_id: mensaje.destinatario_id });
-      }
+      io.emit('mensaje-borrado-privado', mensajeId);
     }
     console.log('Mensaje borrado correctamente:', mensajeId);
     res.json({ ok: true });
