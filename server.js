@@ -8,16 +8,8 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(express.json());
-const allowedOrigins = [
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'https://rav-frontend.netlify.app',
-  'https://rav-backend.onrender.com', // tu backend en Render
-  'app://.', // Electron
-];
 app.use(cors({
-  origin: allowedOrigins,
-  credentials: true
+  origin: ['http://localhost:3000', 'https://rav-frontend.netlify.app']
 }));
 
 // Servir archivos estáticos desde la carpeta uploads
@@ -48,7 +40,7 @@ app.get('/test-db', async (req, res) => {
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: allowedOrigins,
+    origin: ['http://localhost:3000', 'https://rav-frontend.netlify.app'],
     methods: ['GET', 'POST', 'DELETE', 'PUT']
   }
 });
